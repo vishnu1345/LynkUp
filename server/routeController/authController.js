@@ -95,6 +95,7 @@ export const Logout = async (req , res )=>{
             httpsOnly: true,
             secure : true
         })
+        res.status(200).send({message : "User Logout"})
     } catch (error) {
         res.status(500).send({ success: false, message: "error" });
         console.log(error);
