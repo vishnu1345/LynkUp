@@ -73,6 +73,9 @@ function Dashboard() {
 
       try {
         await apiClient.post("/auth/logout");
+        socket.off("disconnect");
+        socket.disconnect();
+        SocketContext.setSocket();
         updateUser(null);
         localStorage.removeItem("userData");
         navigate("/login");
