@@ -27,10 +27,11 @@ app.get("/", (req, res) => {
 
 const allowedOrigins = [process.env.CLIENT_URL];
 
+
 app.use(cors({
-    origin : function(origin , callack){
+    origin : function(origin , callback){
         if(!origin || allowedOrigins.includes(origin)){
-            callack(null , true); // allow the req if its from allowed region
+            callback(null , true); // allow the req if its from allowed region
         }
         else{
             callback(new Error('Not allowed by CORS'));
@@ -100,6 +101,22 @@ app.use('/api/user' , userRoute);
           io.emit("online-users", onlineUser); // Broadcast updated online users list
         });
 
+        socket.on("callToUser" , (data)=>{
+            // console.log("incoming call from" , data);
+            const call = onlineUser.find((user)=>user.userId === data.callToUserId);
+            if(!call){
+                socket.emit("userUnavailable" , {message :`${call.name} is offline`});
+            }
+            
+            // emit an event to receiver socket 
+            io.to(call.socketId).emit("callToUser", {
+                signal : data.signalData,
+                from : data.from,
+                name : data.name,
+                email : data.email,
+                profilepic : data.profilepic
+            });
+        })
         socket.on("disconnect", () => {
           const user = onlineUser.find((u) => u.socketId === socket.id); // Find the disconnected user
 
