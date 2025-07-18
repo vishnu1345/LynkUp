@@ -105,7 +105,7 @@ app.use('/api/user' , userRoute);
             // console.log("incoming call from" , data);
             const call = onlineUser.find((user)=>user.userId === data.callToUserId);
             if(!call){
-                socket.emit("userUnavailable" , {message :`${call.name} is offline`});
+                socket.emit("userUnavailable" , {message :`${call?.name} is offline`});
             }
             
             // emit an event to receiver socket 
@@ -117,6 +117,29 @@ app.use('/api/user' , userRoute);
                 profilepic : data.profilepic
             });
         })
+
+        socket.on("answeredCall" , (data)=>{
+            io.to(data.to).emit("callAccepted" , {
+                signal : data.signal,
+                from : data.from
+            })
+        });
+
+        socket.on("call-ended" , (data)=>{
+            io.to(data.to).emit("call-ended" , {
+                name : data.name,
+                
+            })
+        })
+
+        socket.on("reject-call" , (data)=>{
+            io.to(data.to).emit("callRejected" , {
+                name : data.name,
+                profilepic : data.profilepic,
+
+            })
+        })
+
         socket.on("disconnect", () => {
           const user = onlineUser.find((u) => u.socketId === socket.id); // Find the disconnected user
 
