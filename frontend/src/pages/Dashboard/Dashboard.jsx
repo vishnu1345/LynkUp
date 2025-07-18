@@ -1,11 +1,21 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useUser } from "../../context/UserContextApi";
 import { useNavigate } from "react-router-dom";
-import { FaBars, FaDoorClosed, FaMicrophone, FaMicrophoneSlash, FaPhoneAlt, FaPhoneSlash, FaTimes, FaVideo, FaVideoSlash } from "react-icons/fa";
+import {
+  FaBars,
+  FaDoorClosed,
+  FaMicrophone,
+  FaMicrophoneSlash,
+  FaPhoneAlt,
+  FaPhoneSlash,
+  FaTimes,
+  FaVideo,
+  FaVideoSlash,
+} from "react-icons/fa";
 import apiClient from "../../apiClient";
 import SocketContext from "../socket/SocketContext";
-import Peer from 'simple-peer';
-
+import Peer from "simple-peer";
+import { Howl } from "howler";
 
 function Dashboard() {
   const { user, updateUser } = useUser();
@@ -34,11 +44,19 @@ function Dashboard() {
   const [callRejecedPopup, setCallRejecedPopup] = useState(false);
   const [callRejectedUser, setCallRejectedUser] = useState(null);
 
-  const [isMicOn, setIsMicOn] = useState(true)
-  const [isCamOn, setIsCamOn] = useState(true)
+  const [isMicOn, setIsMicOn] = useState(true);
+  const [isCamOn, setIsCamOn] = useState(true);
 
   const socket = SocketContext.getSocket();
-  console.log(socket);
+
+  // ✅ Create ringtone only once using useRef
+  const ringtoneRef = useRef(
+    new Howl({
+      src: ["/ringtone.mp3"],
+      loop: true,
+      volume: 1.0,
+    })
+  );
 
   useEffect(() => {
     if (user && socket && !hasJoined.current) {
@@ -52,21 +70,27 @@ function Dashboard() {
       setOnlineUsers(onlineUser);
     });
 
-    socket.on("callToUser" , (data)=>{
-        setReceivingCall(true);
-        setCaller(data);
-        setCallerSignal(data.signal)
-    })
+    socket.on("callToUser", (data) => {
+      setReceivingCall(true);
+      setCaller(data);
+      setCallerSignal(data.signal);
 
-    socket.on("call-ended" , (data)=>{
-        console.log("call ended by" , data.name);
-        endCallCleanup();
-    })
+      // ✅ Play ringtone only if not already playing
+      if (!ringtoneRef.current.playing()) {
+        ringtoneRef.current.play();
+      }
+    });
 
-    socket.on("callRejected" , (data)=>{
-        setCallRejecedPopup(true);
-        setCallRejectedUser(data);
-    })
+    socket.on("call-ended", (data) => {
+      ringtoneRef.current.stop(); // ✅ Stop ringtone
+      endCallCleanup();
+    });
+
+    socket.on("callRejected", (data) => {
+      setCallRejecedPopup(true);
+      setCallRejectedUser(data);
+      ringtoneRef.current.stop(); // ✅ Stop ringtone
+    });
 
     return () => {
       socket.off("me");
@@ -76,12 +100,6 @@ function Dashboard() {
       socket.off("callRejected");
     };
   }, [user, socket]);
-
-  // console.log(onlineUsers);
-  console.log("getting call from" , caller);
-  
-
-  const isOnlineUser = (userId) => onlineUsers.some((u) => u.userId === userId);
 
   const allusers = async () => {
     try {
@@ -101,147 +119,163 @@ function Dashboard() {
     allusers();
   }, []);
 
-
-  const startCall = async ()=>{
-      try {
-        const currentStream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-          },
-        });
-        setStream(currentStream);
-        if (myVideo.current) {
-          myVideo.current.srcObject = currentStream;
-          myVideo.current.muted = true;
-          myVideo.current.volume = 0;
-        }
-
-        currentStream
-          .getAudioTracks()
-          .forEach((track) => (track.enabled = true));
-        
-        setCallRejecedPopup(false);
-        setIsSidebarOpen(false);
-        setSelectedUser(showReceiverDetails._id);
-        // console.log("calling to", showReceiverDetails._id);
-
-        const peer = new Peer({
-          initiator: true, // this user starts a call
-          trickle: false, // prevents trickling of ICE candidates , ensuring a single signal exchange
-          stream: currentStream, // attach a local video stream
-        });
-
-        // ✅ Handle the "signal" event (this occurs when the WebRTC handshake is initiated)
-        peer.on("signal" , (data)=>{
-            console.log("call to user with signal");
-            socket.emit("callToUser", {
-              // Emit a "callToUser" event to the server with necessary call details
-              callToUserId: showReceiverDetails._id,
-              signalData: data,
-              from: me,
-              name: user.username,
-              email: user.email,
-              profilepic: user.profilepic,
-            });
-        })
-
-        peer.on("stream" , (receiverStream)=>{
-            if(receiverVideo.current){
-              receiverVideo.current.srcObject = receiverStream;
-              receiverVideo.current.muted = false;
-              receiverVideo.current.volume = 1.0;
-            }
-        })
-
-        socket.once("callAccepted", (data)=>{
-          setCallAccepted(true);
-          setCallRejecedPopup(false);
-          setCaller(data.from);
-          peer.signal(data.signal);
-        })
-        // storing peer connection reference to manage later(like ending call)
-        connectionRef.current = peer;
-        setShowReceiverDetailPopup(false);
-      } catch (error) {
-        console.log("error accessing media device" , error);
+  const startCall = async () => {
+    try {
+      const currentStream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      });
+      setStream(currentStream);
+      if (myVideo.current) {
+        myVideo.current.srcObject = currentStream;
+        myVideo.current.muted = true;
+        myVideo.current.volume = 0;
       }
-  }
 
-  const handelacceptCall = async ()=>{
-      try {
-        const currentStream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-          },
+      currentStream.getAudioTracks().forEach((track) => (track.enabled = true));
+
+      setCallRejecedPopup(false);
+      setIsSidebarOpen(false);
+      setSelectedUser(showReceiverDetails._id);
+
+      const peer = new Peer({
+        initiator: true,
+        trickle: false,
+        stream: currentStream,
+      });
+
+      peer.on("signal", (data) => {
+        socket.emit("callToUser", {
+          callToUserId: showReceiverDetails._id,
+          signalData: data,
+          from: me,
+          name: user.username,
+          email: user.email,
+          profilepic: user.profilepic,
         });
+      });
 
-        setStream(currentStream);
-        if (myVideo.current) {
-          myVideo.current.srcObject = currentStream;
+      peer.on("stream", (receiverStream) => {
+        if (receiverVideo.current) {
+          receiverVideo.current.srcObject = receiverStream;
+          receiverVideo.current.muted = false;
+          receiverVideo.current.volume = 1.0;
         }
+      });
 
-        currentStream
-          .getAudioTracks()
-          .forEach((track) => (track.enabled = true));
-        
-
+      socket.once("callAccepted", (data) => {
         setCallAccepted(true);
-        setReceivingCall(true);
-        setIsSidebarOpen(false);
+        setCallRejecedPopup(false);
+        setCaller(data.from);
+        peer.signal(data.signal);
+        ringtoneRef.current.stop(); // ✅ Stop ringtone
+      });
 
-        const peer = new Peer({
-          initiator: false, // this user does not start call 
-          trickle: false, 
-          stream: currentStream, 
-        });
+      connectionRef.current = peer;
+      setShowReceiverDetailPopup(false);
+    } catch (error) {
+      console.log("error accessing media device", error);
+    }
+  };
 
-        peer.on("signal" , (data)=>{
-          socket.emit("answeredCall" , {
-            signal : data,
-            from : me,
-            to : caller.from
-          })
-        })
+  const handelacceptCall = async () => {
+    ringtoneRef.current.stop(); // ✅ Stop ringtone
+    try {
+      const currentStream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      });
 
-        peer.on("stream" , (receiverStream)=>{
-          if(receiverVideo.current){
-            receiverVideo.current.srcObject = receiverStream;
-            receiverVideo.current.muted = false;
-            receiverVideo.current.volume = 1.0;
-          }
-        })
-
-        if(callerSignal) peer.signal(callerSignal);
-
-        connectionRef.current = peer;
-
-      } catch (error) {
-        console.log("error accessing media device", error);
+      setStream(currentStream);
+      if (myVideo.current) {
+        myVideo.current.srcObject = currentStream;
       }
-  }
 
-  const handelendCall = ()=>{
-    socket.emit("call-ended" , {
-      to: caller.from || selectedUser._id,
-      name : user.username
-    })
+      currentStream.getAudioTracks().forEach((track) => (track.enabled = true));
+
+      setCallAccepted(true);
+      setReceivingCall(true);
+      setIsSidebarOpen(false);
+
+      const peer = new Peer({
+        initiator: false,
+        trickle: false,
+        stream: currentStream,
+      });
+
+      peer.on("signal", (data) => {
+        socket.emit("answeredCall", {
+          signal: data,
+          from: me,
+          to: caller.from,
+        });
+      });
+
+      peer.on("stream", (receiverStream) => {
+        if (receiverVideo.current) {
+          receiverVideo.current.srcObject = receiverStream;
+          receiverVideo.current.muted = false;
+          receiverVideo.current.volume = 1.0;
+        }
+      });
+
+      if (callerSignal) peer.signal(callerSignal);
+
+      connectionRef.current = peer;
+    } catch (error) {
+      console.log("error accessing media device", error);
+    }
+  };
+
+  const handelendCall = () => {
+    ringtoneRef.current.stop(); // ✅ Stop ringtone
+    socket.emit("call-ended", {
+      to: caller?.from || selectedUser?._id,
+      name: user.username,
+    });
     endCallCleanup();
-}
+  };
 
-  const handelrejectCall = ()=>{
-      setReceivingCall(false);
-      setCallAccepted(false);
+  const handelrejectCall = () => {
+    ringtoneRef.current.stop(); // ✅ Stop ringtone
+    setReceivingCall(false);
+    setCallAccepted(false);
 
-      socket.emit("reject-call" , {
-          to : caller.from,
-          name : user.username,
-          profilepic : user.profilepic
-      })
-  }
+    socket.emit("reject-call", {
+      to: caller.from,
+      name: user.username,
+      profilepic: user.profilepic,
+    });
+  };
+
+  const endCallCleanup = () => {
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+    }
+    if (receiverVideo.current) {
+      receiverVideo.current.srcObject = null;
+    }
+    if (myVideo.current) {
+      myVideo.current.srcObject = null;
+    }
+
+    connectionRef.current?.destroy?.();
+    ringtoneRef.current.stop(); // ✅ Stop ringtone if still playing
+
+    setStream(null);
+    setReceivingCall(null);
+    setCallAccepted(null);
+    setSelectedUser(null);
+    setTimeout(() => {
+      window.location.reload();
+    }, 100);
+  };
 
   const toggleMic = () => {
     if (stream) {
@@ -263,28 +297,7 @@ function Dashboard() {
     }
   };
 
-  const endCallCleanup = ()=>{
-    if(stream){
-      stream.getTracks().forEach((track)=>track.stop());
-    }
-      if(receiverVideo.current){
-        receiverVideo.current.srcObject = null;
-      }
-      if(myVideo.current){
-        myVideo.current.srcObject = null;
-      }
-
-      connectionRef.current.destroy();
-
-      setStream(null);
-      setReceivingCall(null);
-      setCallAccepted(null);
-      setSelectedUser(null);
-      setTimeout(()=>{
-        window.location.reload();
-      } , 100)
-    
-  }
+  const isOnlineUser = (userId) => onlineUsers.some((u) => u.userId === userId);
 
   const filteredUsers = users.filter(
     (u) =>
@@ -306,18 +319,13 @@ function Dashboard() {
     }
   };
 
-  // matchMedia;
   const handelSelectedUser = (user) => {
-    console.log("selected user ", user);
-    const selected = filteredUsers.find((user) => user._id === user._id);
     setSelectedUser(user._id);
     setShowReceiverDetails(user);
     setShowReceiverDetailPopup(true);
   };
 
-  
 
-  console.log("receiver video" , receiverVideo)
   return (
     <div className="flex min-h-screen bg-gray-100">
       {isSidebarOpen && (
@@ -489,15 +497,15 @@ function Dashboard() {
 
               {/* Instructions */}
               {/* <div className="bg-gray-800 p-4 rounded-lg shadow-lg text-sm">
-          <h2 className="text-lg font-semibold mb-2">
-            💡 How to Start a Video Call?
-          </h2>
-          <ul className="list-disc pl-5 space-y-2 text-gray-400">
-            <li>📌 Open the sidebar to see online users.</li>
-            <li>🔍 Use the search bar to find a specific person.</li>
-            <li>🎥 Click on a user to start a video call instantly!</li>
-          </ul>
-        </div> */}
+              <h2 className="text-lg font-semibold mb-2">
+                💡 How to Start a Video Call?
+              </h2>
+              <ul className="list-disc pl-5 space-y-2 text-gray-400">
+                <li>📌 Open the sidebar to see online users.</li>
+                <li>🔍 Use the search bar to find a specific person.</li>
+                <li>🎥 Click on a user to start a video call instantly!</li>
+              </ul>
+            </div> */}
             </div>
           )}
 
@@ -608,7 +616,7 @@ function Dashboard() {
                     <button
                       type="button"
                       onClick={() => {
-                        // endCallCleanup();
+                        endCallCleanup();
                         setCallRejecedPopup(false);
                         setShowReceiverDetailPopup(false);
                       }}
