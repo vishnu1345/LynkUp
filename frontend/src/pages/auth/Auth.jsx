@@ -53,7 +53,7 @@ const Auth = ({ type }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-900 to-purple-800 text-white">
+    <div className="min-h-screen flex items-center flex-col justify-center bg-gradient-to-br from-blue-900 to-purple-800 text-white">
       <div className="bg-white text-gray-900 p-8 rounded-lg shadow-white shadow-2xl w-full max-w-md m-2">
         <h2 className="text-3xl font-extrabold text-center mb-6">
           {type === "signup" ? "SignUp LynkUp" : "Login LynkUp"}
@@ -173,6 +173,27 @@ const Auth = ({ type }) => {
         </p>
       </div>
       <Toaster position="top-center" />
+      <div className="bg-white text-gray-900 p-8 rounded-lg shadow-white shadow-2xl w-full max-w-md m-2 text-center">
+        <h2 className="text-3xl font-extrabold text-center mb-3">
+          For Testing Purposes:
+        </h2>
+        <p className="font-bold mb-4">login into two accounts</p>
+        <p className="font-bold mb-2">Demo accounts(or create new ones) : </p>
+        <p>account 1 :</p>
+        <h4 className="text-1xl font-extrabold text-center">
+          email : newuser@gmail.com
+        </h4>
+        <h4 className="text-1xl font-extrabold text-center mb-6">
+          password : 12345
+        </h4>
+        <h4>account 2 :</h4>
+        <h4 className="text-1xl font-extrabold text-center ">
+          email : user2@gmail.com
+        </h4>
+        <h4 className="text-1xl font-extrabold text-center mb-6">
+          password : 12345
+        </h4>
+      </div>
     </div>
   );
 };
